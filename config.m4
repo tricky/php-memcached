@@ -30,6 +30,19 @@ if test -z "$PHP_DEBUG"; then
   ])
 fi
 
+PHP_ARG_WITH(memcached-class-name, 'memcached client class name',
+[  --with-memcached-class-name      Memcached client PHP class name], 'Memcached', no)
+
+AC_DEFINE_UNQUOTED([MEMCACHED_CLASS_NAME], [$PHP_MEMCACHED_CLASS_NAME], [Memcached client PHP class name])
+AC_DEFINE_UNQUOTED([MEMCACHED_CLASS_NAME_STR], ["$PHP_MEMCACHED_CLASS_NAME"], [Memcached client PHP class name quoted])
+PHP_SUBST(PHP_MEMCACHED_CLASS_NAME)
+
+PHP_ARG_WITH(memcached-exception-name, 'memcached client exception class name',
+[  --with-memcached-exception-name  Memcached client PHP exception class name], ["$PHP_MEMCACHED_CLASS_NAME"Exception], no)
+AC_DEFINE_UNQUOTED([MEMCACHED_EXCEPTION_NAME], [$PHP_MEMCACHED_EXCEPTION_NAME], [Memcached client PHP exception class name])
+AC_DEFINE_UNQUOTED([MEMCACHED_EXCEPTION_NAME_STR], ["$PHP_MEMCACHED_EXCEPTION_NAME"], [Memcached client PHP exception class name quoted])
+PHP_SUBST(PHP_MEMCACHED_EXCEPTION_NAME)
+
 if test "$PHP_MEMCACHED" != "no"; then
 
   dnl # zlib
@@ -150,7 +163,6 @@ if test "$PHP_MEMCACHED" != "no"; then
 		AC_MSG_RESULT([disabled])
 	fi
 
-  AC_MSG_CHECKING([for libmemcached location])
   if test "$PHP_LIBMEMCACHED_DIR" != "no" && test "$PHP_LIBMEMCACHED_DIR" != "yes"; then
     if test -r "$PHP_LIBMEMCACHED_DIR/include/libmemcached/memcached.h"; then
       PHP_LIBMEMCACHED_DIR="$PHP_LIBMEMCACHED_DIR"
@@ -167,9 +179,7 @@ if test "$PHP_MEMCACHED" != "no"; then
 	  done
   fi
 
-  dnl We're sometimes missing the definition of memcached_version?
-  AC_CHECK_DECLS([memcached_version])
-
+  AC_MSG_CHECKING([for libmemcached location])
   if test "$PHP_LIBMEMCACHED_DIR" = "no"; then
     AC_MSG_ERROR([memcached support requires libmemcached. Use --with-libmemcached-dir=<DIR> to specify the prefix where libmemcached headers and library are located])
   else
@@ -179,7 +189,7 @@ if test "$PHP_MEMCACHED" != "no"; then
     PHP_ADD_LIBRARY_WITH_PATH(memcached, $PHP_LIBMEMCACHED_DIR/lib, MEMCACHED_SHARED_LIBADD)
 
     PHP_SUBST(MEMCACHED_SHARED_LIBADD)
-    PHP_NEW_EXTENSION(memcached, php_memcached.c , $ext_shared,,$SESSION_INCLUDES $IGBINARY_INCLUDES)
+    PHP_NEW_EXTENSION(memcached, php_memcached.c, $ext_shared,,$SESSION_INCLUDES $IGBINARY_INCLUDES)
 
     ifdef([PHP_ADD_EXTENSION_DEP],
     [
@@ -188,5 +198,6 @@ if test "$PHP_MEMCACHED" != "no"; then
 
   fi
 
+  PHP_ADD_MAKEFILE_FRAGMENT
 fi
 

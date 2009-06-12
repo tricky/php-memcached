@@ -4,8 +4,9 @@ Memcached constructor
 <?php if (!extension_loaded("memcached")) print "skip"; ?>
 --FILE--
 <?php 
-$m = new Memcached();
-echo get_class($m);
+require('php_test_init.php');
+$m = new $php_class_name();
+var_dump(get_class($m) == $php_class_name);
 ?>
 --EXPECT--
-Memcached
+bool(true)

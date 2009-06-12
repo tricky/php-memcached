@@ -4,27 +4,28 @@ Memcached options
 <?php if (!extension_loaded("memcached")) print "skip"; ?>
 --FILE--
 <?php 
-$m = new Memcached();
-$m->setOption(Memcached::OPT_SERIALIZER, Memcached::SERIALIZER_PHP);
+require('php_test_init.php');
+$m = new $php_class_name();
 
-var_dump($m->getOption(Memcached::OPT_COMPRESSION));
-var_dump($m->getOption(Memcached::OPT_SERIALIZER));
-var_dump($m->getOption(Memcached::OPT_SOCKET_SEND_SIZE));
+$m->setOption($php_class_name_OPT_SERIALIZER, $php_class_name_SERIALIZER_PHP);
 
-$m->setOption(Memcached::OPT_PREFIX_KEY, "\x01");
+var_dump($m->getOption($php_class_name_OPT_COMPRESSION));
+var_dump($m->getOption($php_class_name_OPT_SERIALIZER));
+var_dump($m->getOption($php_class_name_OPT_SOCKET_SEND_SIZE));
 
-var_dump($m->getOption(Memcached::OPT_HASH) == Memcached::HASH_DEFAULT);
-$m->setOption(Memcached::OPT_HASH, Memcached::HASH_MURMUR);
-var_dump($m->getOption(Memcached::OPT_HASH) == Memcached::HASH_MURMUR);
+$m->setOption($php_class_name_OPT_PREFIX_KEY, "\x01");
 
+var_dump($m->getOption($php_class_name_OPT_HASH) == $php_class_name_HASH_DEFAULT);
+$m->setOption($php_class_name_OPT_HASH, $php_class_name_HASH_MURMUR);
+var_dump($m->getOption($php_class_name_OPT_HASH) == $php_class_name_HASH_MURMUR);
 ?>
 --EXPECTF--
 bool(true)
 int(1)
 
-Warning: Memcached::getOption(): no servers defined in %s on line %d
+Warning: %s::getOption(): no servers defined in %s on line %d
 NULL
 
-Warning: Memcached::setOption(): bad key provided in %s on line %d
+Warning: %s::setOption(): bad key provided in %s on line %d
 bool(true)
 bool(true)

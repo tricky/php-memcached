@@ -4,15 +4,16 @@ persistent memcached connection
 <?php if (!extension_loaded("memcached")) print "skip"; ?>
 --FILE--
 <?php 
-$m1 = new Memcached('id1');
-$m1->setOption(Memcached::OPT_PREFIX_KEY, 'php');
-var_dump($m1->getOption(Memcached::OPT_PREFIX_KEY));
+require('php_test_init.php');
+$m1 = new $php_class_name('id1');
+$m1->setOption($php_class_name_OPT_PREFIX_KEY, 'php');
+var_dump($m1->getOption($php_class_name_OPT_PREFIX_KEY));
 
-$m2 = new Memcached('id1');
-var_dump($m1->getOption(Memcached::OPT_PREFIX_KEY));
+$m2 = new $php_class_name('id1');
+var_dump($m1->getOption($php_class_name_OPT_PREFIX_KEY));
 
-$m3 = new Memcached();
-var_dump($m3->getOption(Memcached::OPT_PREFIX_KEY));
+$m3 = new $php_class_name();
+var_dump($m3->getOption($php_class_name_OPT_PREFIX_KEY));
 ?>
 --EXPECT--
 string(3) "php"

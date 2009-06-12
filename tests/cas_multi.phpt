@@ -4,7 +4,8 @@ Memcached multi fetch cas & set cas
 <?php if (!extension_loaded("memcached")) print "skip"; ?>
 --FILE--
 <?php
-$m = new Memcached();
+require('php_test_init.php');
+$m = new $php_class_name();
 $m->addServer('127.0.0.1', 11211, 1);
 
 $data = array(

@@ -4,7 +4,8 @@ Memcached store & fetch expired key
 <?php if (!extension_loaded("memcached")) print "skip"; ?>
 --FILE--
 <?php
-$m = new Memcached();
+require('php_test_init.php');
+$m = new $php_class_name();
 $m->addServer('127.0.0.1', 11211, 1);
 
 $set = $m->set('will_expire', "foo", 2);
@@ -15,9 +16,9 @@ if (!$set || $v != 'foo') {
 sleep(3);
 $v = $m->get('will_expire');
 
-if ($v !== Memcached::GET_ERROR_RETURN) {
+if ($v !== $php_class_name_GET_ERROR_RETURN) {
 	echo "Wanted a:\n";
-	var_dump(Memcached::GET_ERROR_RETURN);
+	var_dump($php_class_name_GET_ERROR_RETURN);
 	echo "from get of expired value. Got:\n";
 	var_dump($v);
 }
