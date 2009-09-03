@@ -148,6 +148,7 @@ typedef struct {
 	} *obj;
 
 	bool is_persistent;
+	bool is_pristine;
 	int rescode;
 	int memc_errno;
 } php_memc_t;
@@ -234,6 +235,7 @@ static PHP_METHOD(Memcached, __construct)
 	}
 
 	i_obj = (php_memc_t *) zend_object_store_get_object(object TSRMLS_CC);
+	i_obj->is_pristine = false;
 
 	if (persistent_id) {
 		zend_rsrc_list_entry *le = NULL;
@@ -269,6 +271,7 @@ static PHP_METHOD(Memcached, __construct)
 
 		m_obj->serializer = MEMC_G(serializer);
 		m_obj->compression = true;
+		i_obj->is_pristine = true;
 
 		if (is_persistent) {
 			zend_rsrc_list_entry le;
@@ -1888,6 +1891,23 @@ static PHP_METHOD(Memcached, isPersistent)
 
 	RETURN_BOOL(i_obj->is_persistent);
 }
+/* }}} */
+
+/* {{{ Memcached::isPristine()
+   Returns the true if instance is recently created */
+static PHP_METHOD(Memcached, isPristine)
+{
+	MEMC_METHOD_INIT_VARS;
+
+	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "") == FAILURE) {
+		return;
+	}
+
+	MEMC_METHOD_FETCH_OBJECT;
+
+	RETURN_BOOL(i_obj->is_pristine);
+}
+/* }}} */
 
 /****************************************
   Internal support code
@@ -2784,6 +2804,9 @@ ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_INFO(arginfo_isPersistent, 0)
 ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_INFO(arginfo_isPristine, 0)
+ZEND_END_ARG_INFO()
 /* }}} */
 
 /* {{{ memcached_class_methods */
@@ -2838,6 +2861,7 @@ static zend_function_entry memcached_class_methods[] = {
     MEMC_ME(setOption,          arginfo_setOption)
 
     MEMC_ME(isPersistent,       arginfo_isPersistent)
+    MEMC_ME(isPristine,         arginfo_isPristine)
     { NULL, NULL, NULL }
 };
 #undef MEMC_ME
