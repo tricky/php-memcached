@@ -128,6 +128,13 @@
 #endif
 #endif
 
+#ifdef HAVE_MEMCACHED_GET_NULL
+/* return null value if value not found */
+#define RETURN_FROM_GET RETURN_NULL()
+#else
+#define RETURN_FROM_GET RETURN_FALSE
+#endif /* HAVE_MEMCACHED_GET_NULL */
+
 /****************************************
   Structures and definitions
 ****************************************/
@@ -346,7 +353,7 @@ static void php_memc_get_impl(INTERNAL_FUNCTION_PARAMETERS, zend_bool by_key)
 
 	if (key_len == 0) {
 		i_obj->rescode = MEMCACHED_BAD_KEY_PROVIDED;
-		RETURN_FALSE;
+		RETURN_FROM_GET;
 	}
 
 	if (cas_token) {
@@ -364,7 +371,7 @@ static void php_memc_get_impl(INTERNAL_FUNCTION_PARAMETERS, zend_bool by_key)
 		status = memcached_mget_by_key(m_obj->memc, server_key, server_key_len, &key, &key_len, 1);
 
 		if (php_memc_handle_error(i_obj, status TSRMLS_CC) < 0) {
-			RETURN_FALSE;
+			RETURN_FROM_GET;
 		}
 
 		status = MEMCACHED_SUCCESS;
@@ -389,7 +396,7 @@ static void php_memc_get_impl(INTERNAL_FUNCTION_PARAMETERS, zend_bool by_key)
 
 			if (php_memc_handle_error(i_obj, status TSRMLS_CC) < 0) {
 				memcached_result_free(&result);
-				RETURN_FALSE;
+				RETURN_FROM_GET;
 			}
 
 			/* if we have a callback, all processing is done */
@@ -406,7 +413,7 @@ static void php_memc_get_impl(INTERNAL_FUNCTION_PARAMETERS, zend_bool by_key)
 		if (php_memc_zval_from_payload(return_value, payload, payload_len, flags TSRMLS_CC) < 0) {
 			memcached_result_free(&result);
 			i_obj->rescode = MEMC_RES_PAYLOAD_FAILURE;
-			RETURN_FALSE;
+			RETURN_FROM_GET;
 		}
 
 		zval_dtor(cas_token);
@@ -453,7 +460,7 @@ static void php_memc_get_impl(INTERNAL_FUNCTION_PARAMETERS, zend_bool by_key)
 			if (payload) {
 				free(payload);
 			}
-			RETURN_FALSE;
+			RETURN_FROM_GET;
 		}
 
 		/* if memcached gave a value and there was no callback, payload may be NULL */
@@ -462,7 +469,7 @@ static void php_memc_get_impl(INTERNAL_FUNCTION_PARAMETERS, zend_bool by_key)
 			free(payload);
 			if (rc < 0) {
 				i_obj->rescode = MEMC_RES_PAYLOAD_FAILURE;
-				RETURN_FALSE;
+				RETURN_FROM_GET;
 			}
 		}
 
@@ -2911,6 +2918,8 @@ zend_module_entry memcached_module_entry = {
 static void php_memc_register_constants(INIT_FUNC_ARGS)
 {
 	#define REGISTER_MEMC_CLASS_CONST_LONG(name, value) zend_declare_class_constant_long(php_memc_get_ce() , ZEND_STRS( #name ) - 1, value TSRMLS_CC)
+	#define REGISTER_MEMC_CLASS_CONST_BOOL(name, value) zend_declare_class_constant_bool(php_memc_get_ce() , ZEND_STRS( #name ) - 1, value TSRMLS_CC)
+	#define REGISTER_MEMC_CLASS_CONST_NULL(name) zend_declare_class_constant_null(php_memc_get_ce() , ZEND_STRS( #name ) - 1)
 
 	/*
 	 * Class options
@@ -3016,6 +3025,15 @@ static void php_memc_register_constants(INIT_FUNC_ARGS)
 	REGISTER_MEMC_CLASS_CONST_LONG(GET_PRESERVE_ORDER, MEMC_GET_PRESERVE_ORDER);
 
 	#undef REGISTER_MEMC_CLASS_CONST_LONG
+
+	/*
+	 * Return value from simple get errors
+	 */
+#ifdef HAVE_MEMCACHED_GET_NULL
+	REGISTER_MEMC_CLASS_CONST_NULL(GET_ERROR_RETURN_VALUE);
+#else
+	REGISTER_MEMC_CLASS_CONST_BOOL(GET_ERROR_RETURN_VALUE, 0);
+#endif
 }
 /* }}} */
 
