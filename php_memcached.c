@@ -554,6 +554,7 @@ static void php_memc_getMulti_impl(INTERNAL_FUNCTION_PARAMETERS, zend_bool by_ke
 		i_obj->rescode = MEMCACHED_BAD_KEY_PROVIDED;
 		efree(mkeys);
 		efree(mkeys_len);
+		zval_dtor(return_value);
 		RETURN_FALSE;
 	}
 
@@ -581,6 +582,7 @@ static void php_memc_getMulti_impl(INTERNAL_FUNCTION_PARAMETERS, zend_bool by_ke
 	efree(mkeys);
 	efree(mkeys_len);
 	if (php_memc_handle_error(i_obj, status TSRMLS_CC) < 0) {
+		zval_dtor(return_value);
 		RETURN_FALSE;
 	}
 
@@ -1932,6 +1934,7 @@ static void php_memc_free_storage(php_memc_t *i_obj TSRMLS_DC)
 	}
 
 	i_obj->obj = NULL;
+	efree(i_obj);
 }
 
 zend_object_value php_memc_new(zend_class_entry *ce TSRMLS_DC)
