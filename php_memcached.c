@@ -26,6 +26,8 @@
 #include "config.h"
 #endif
 
+#include <error.h>
+#include <string.h>
 #include <php.h>
 
 #ifdef ZTS
@@ -147,6 +149,7 @@ typedef struct {
 
 	bool is_persistent;
 	int rescode;
+	int memc_errno;
 } php_memc_t;
 
 enum {
@@ -1851,6 +1854,18 @@ static PHP_METHOD(Memcached, getResultMessage)
 			RETURN_STRING("PAYLOAD FAILURE", 1);
 			break;
 
+		case MEMCACHED_ERRNO:
+		case MEMCACHED_CONNECTION_SOCKET_CREATE_FAILURE:
+		case MEMCACHED_UNKNOWN_READ_FAILURE:
+			if (i_obj->memc_errno) {
+				char *str;
+				int str_len;
+				str_len = spprintf(&str, 0, "%s: %s", memcached_strerror(m_obj->memc, i_obj->rescode),
+					strerror(i_obj->memc_errno));
+				RETURN_STRINGL(str, str_len, 0);
+				return;
+			}
+			/* Fall through */
 		default:
 			RETURN_STRING(memcached_strerror(m_obj->memc, i_obj->rescode), 1);
 			break;
@@ -1922,16 +1937,20 @@ static int php_memc_handle_error(php_memc_t *i_obj, memcached_return status TSRM
 		case MEMCACHED_DELETED:
 		case MEMCACHED_STAT:
 			result = 0;
+			i_obj->memc_errno = 0;
 			break;
 
 		case MEMCACHED_END:
 		case MEMCACHED_BUFFERED:
 			i_obj->rescode = status;
+			i_obj->memc_errno = 0;
 			result = 0;
 			break;
 
 		default:
 			i_obj->rescode = status;
+			/* Hnngghgh! */
+			i_obj->memc_errno = i_obj->obj->memc->cached_errno;
 			result = -1;
 			break;
 	}
