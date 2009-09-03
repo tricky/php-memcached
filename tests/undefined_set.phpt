@@ -4,7 +4,7 @@ Set with undefined key and value
 <?php if (!extension_loaded("memcached")) print "skip"; ?>
 --FILE--
 <?php
-$m = new Memcached();
+$m = new Libmemcached();
 $m->addServer('127.0.0.1', 11211, 1);
 
 $key = 'foobarbazDEADC0DE';

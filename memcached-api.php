@@ -1,10 +1,10 @@
 <?php
 
 /**
- * Memcached class.
+ * Libmemcached class.
  */
 
-class Memcached {
+class Libmemcached {
 
 	/**
 	 * Error codes etc.
@@ -159,7 +159,7 @@ class Memcached {
 
 }
 
-class MemcachedException extends Exception {
+class LibmemcachedException extends Exception {
 
 	function __construct( $errmsg = "", $errcode  = 0 ) {}
 

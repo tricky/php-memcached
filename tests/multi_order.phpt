@@ -1,10 +1,10 @@
 --TEST--
-Memcached GET_PRESERVE_ORDER flag in getMulti
+Libmemcached GET_PRESERVE_ORDER flag in getMulti
 --SKIPIF--
 <?php if (!extension_loaded("memcached")) print "skip"; ?>
 --FILE--
 <?php
-$m = new Memcached();
+$m = new Libmemcached();
 $m->addServer('127.0.0.1', 11211, 1);
 $m->addServer('localhost', 11211, 1);
 
@@ -24,7 +24,7 @@ foreach ($data as $k => $v) {
 $null = null;
 $keys = array_keys($data);
 $keys[] = 'zoo';
-$got = $m->getMulti($keys, $null, Memcached::GET_PRESERVE_ORDER);
+$got = $m->getMulti($keys, $null, Libmemcached::GET_PRESERVE_ORDER);
 
 foreach ($got as $k => $v) {
 	echo "$k $v\n";

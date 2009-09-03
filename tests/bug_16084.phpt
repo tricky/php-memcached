@@ -1,11 +1,11 @@
 --TEST--
-Memcached: Bug #16084 (Crash when addServers is called with an associative array)
+Libmemcached: Bug #16084 (Crash when addServers is called with an associative array)
 --SKIPIF--
 <?php if (!extension_loaded("memcached")) print "skip"; ?>
 --FILE--
 <?php 
 $servers = array ( 0 => array ( 'KEYHERE' => 'localhost', 11211, 3 ), );
-$m = new memcached();
+$m = new Libmemcached();
 $m->addServers($servers);
 var_dump($m->getServerList());
 ?>

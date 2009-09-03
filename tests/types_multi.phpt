@@ -1,10 +1,10 @@
 --TEST--
-Memcached multi store & multi fetch type and value correctness
+Libmemcached multi store & multi fetch type and value correctness
 --SKIPIF--
 <?php if (!extension_loaded("memcached")) print "skip"; ?>
 --FILE--
 <?php
-$m = new Memcached();
+$m = new Libmemcached();
 $m->addServer('127.0.0.1', 11211, 1);
 
 class testclass {

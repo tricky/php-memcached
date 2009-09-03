@@ -1,10 +1,10 @@
 --TEST--
-Memcached store & fetch expired key
+Libmemcached store & fetch expired key
 --SKIPIF--
 <?php if (!extension_loaded("memcached")) print "skip"; ?>
 --FILE--
 <?php
-$m = new Memcached();
+$m = new Libmemcached();
 $m->addServer('127.0.0.1', 11211, 1);
 
 $set = $m->set('will_expire', "foo", 2);
@@ -15,9 +15,9 @@ if (!$set || $v != 'foo') {
 sleep(3);
 $v = $m->get('will_expire');
 
-if ($v !== Memcached::GET_ERROR_RETURN_VALUE) {
+if ($v !== Libmemcached::GET_ERROR_RETURN_VALUE) {
 	echo "Wanted:\n";
-	var_dump(Memcached::GET_ERROR_RETURN_VALUE);
+	var_dump(Libmemcached::GET_ERROR_RETURN_VALUE);
 	echo "from get of expired value. Got:\n";
 	var_dump($v);
 }

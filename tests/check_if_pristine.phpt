@@ -5,23 +5,23 @@ Check if persistent object is new or an old persistent one
 ?>
 --FILE--
 <?php 
-$m1 = new Memcached('id1');
-$m1->setOption(Memcached::OPT_PREFIX_KEY, "foo_");
+$m1 = new Libmemcached('id1');
+$m1->setOption(Libmemcached::OPT_PREFIX_KEY, "foo_");
 
 var_dump($m1->isPristine());
 
-$m1 = new Memcached('id1');
+$m1 = new Libmemcached('id1');
 var_dump($m1->isPristine());
 
-$m2 = new Memcached('id1');
+$m2 = new Libmemcached('id1');
 var_dump($m2->isPristine());
 // this change affects $m1
-$m2->setOption(Memcached::OPT_PREFIX_KEY, "bar_");
+$m2->setOption(Libmemcached::OPT_PREFIX_KEY, "bar_");
 
-$m3 = new Memcached('id2');
+$m3 = new Libmemcached('id2');
 var_dump($m3->isPristine());
 
-$m3 = new Memcached();
+$m3 = new Libmemcached();
 var_dump($m3->isPristine());
 --EXPECT--
 bool(true)

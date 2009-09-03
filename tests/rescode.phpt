@@ -1,10 +1,10 @@
 --TEST--
-Memcached result codes.
+Libmemcached result codes.
 --SKIPIF--
 <?php if (!extension_loaded("memcached")) print "skip"; ?>
 --FILE--
 <?php
-$m = new Memcached();
+$m = new Libmemcached();
 echo $m->getResultMessage(), "\n";
 
 $m->addServer('127.0.0.1', 11211, 1);
@@ -25,7 +25,7 @@ $m->getMulti(array('asdf_a', 'jkhjkhjkb', 'nbahsdgc'));
 echo $m->getResultMessage(), "\n";
 $code = $m->getResultCode();
 
-$m2 = new Memcached();
+$m2 = new Libmemcached();
 $m2->getMulti(array('asdf_a', 'jkhjkhjkb', 'nbahsdgc'));
 echo $m2->getResultCode(), "\n";
 echo $m2->getResultMessage(), "\n";
@@ -39,9 +39,9 @@ echo $m2->getResultCode(), "\n";
 echo $m2->getResultMessage(), "\n";
 
 var_dump($m->getResultCode() == $code);
-$m = new Memcached('test1');
+$m = new Libmemcached('test1');
 $m->addServer('127.0.0.1', 11211);
-$m2 = new Memcached('test1');
+$m2 = new Libmemcached('test1');
 
 $m->delete('moikkamitakuuluu');
 echo $m->getResultMessage(), "\n";
