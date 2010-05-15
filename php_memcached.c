@@ -1722,7 +1722,7 @@ PHP_METHOD(Memcached, addServers)
    Returns the list of the memcache servers in use */
 PHP_METHOD(Memcached, getServerList)
 {
-	zval *array;
+	zval *array = NULL;
 	struct callbackContext context = {0};
 	memcached_server_function callbacks[1];
 	MEMC_METHOD_INIT_VARS;
@@ -1784,9 +1784,9 @@ PHP_METHOD(Memcached, getStats)
 	memcached_stat_st *stats;
 	memcached_server_st *servers;
 	memcached_return status;
-	zval *entry;
 	struct callbackContext context = {0};
 	memcached_server_function callbacks[1];
+	zend_bool free_stats = 1;
 	MEMC_METHOD_INIT_VARS;
 
 	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "") == FAILURE) {
@@ -1796,11 +1796,19 @@ PHP_METHOD(Memcached, getStats)
 	MEMC_METHOD_FETCH_OBJECT;
 
 	stats = memcached_stat(m_obj->memc, NULL, &status);
+	/* this is because memcached_stat returns non-null pointer on 0 servers
+	 * which breaks memcached_stat_free, this is not particulary clean */
+	if (errno != 0 || stats == NULL) {
+		free_stats = 0;
+	} else if (memcached_server_count(m_obj->memc) == 0) {
+		free_stats = 0;
+	}
+
 	php_memc_handle_error(i_obj, status TSRMLS_CC);
-	if (stats == NULL) {
-		RETURN_FALSE;
-	} else if (status != MEMCACHED_SUCCESS && status != MEMCACHED_SOME_ERRORS) {
-		memcached_stat_free(m_obj->memc, stats);
+	if (status != MEMCACHED_SUCCESS && status != MEMCACHED_SOME_ERRORS) {
+		if (free_stats) {
+			memcached_stat_free(NULL, stats);
+		}
 		RETURN_FALSE;
 	}
 
@@ -1808,12 +1816,13 @@ PHP_METHOD(Memcached, getStats)
 
 	callbacks[0] = php_memc_do_stats_callback;
 	context.i = 0;
-	context.entry = entry;
 	context.stats = stats;
 	context.return_value = return_value;
 	memcached_server_cursor(m_obj->memc, callbacks, &context, 1);
 
-	memcached_stat_free(m_obj->memc, stats);
+	if (free_stats) {
+		memcached_stat_free(NULL, stats);
+	}
 }
 /* }}} */
 
@@ -2287,36 +2296,39 @@ static memcached_return php_memc_do_stats_callback(const memcached_st *ptr, memc
 	int hostport_len;
 	struct callbackContext* context = (struct callbackContext*) in_context;
 	hostport_len = spprintf(&hostport, 0, "%s:%d", instance->hostname, instance->port);
+	zval *entry = NULL;
 
-	MAKE_STD_ZVAL(context->entry);
-	array_init(context->entry);
+	if (context->stats[context->i].pid > 0) {
+		MAKE_STD_ZVAL(entry);
+		array_init(entry);
 
-	add_assoc_long(context->entry, "pid", context->stats[context->i].pid);
-	add_assoc_long(context->entry, "uptime", context->stats[context->i].uptime);
-	add_assoc_long(context->entry, "threads", context->stats[context->i].threads);
-	add_assoc_long(context->entry, "time", context->stats[context->i].time);
-	add_assoc_long(context->entry, "pointer_size", context->stats[context->i].pointer_size);
-	add_assoc_long(context->entry, "rusage_user_seconds", context->stats[context->i].rusage_user_seconds);
-	add_assoc_long(context->entry, "rusage_user_microseconds", context->stats[context->i].rusage_user_microseconds);
-	add_assoc_long(context->entry, "rusage_system_seconds", context->stats[context->i].rusage_system_seconds);
-	add_assoc_long(context->entry, "rusage_system_microseconds", context->stats[context->i].rusage_system_microseconds);
-	add_assoc_long(context->entry, "curr_items", context->stats[context->i].curr_items);
-	add_assoc_long(context->entry, "total_items", context->stats[context->i].total_items);
-	add_assoc_long(context->entry, "limit_maxbytes", context->stats[context->i].limit_maxbytes);
-	add_assoc_long(context->entry, "curr_connections", context->stats[context->i].curr_connections);
-	add_assoc_long(context->entry, "total_connections", context->stats[context->i].total_connections);
-	add_assoc_long(context->entry, "connection_structures", context->stats[context->i].connection_structures);
-	add_assoc_long(context->entry, "bytes", context->stats[context->i].bytes);
-	add_assoc_long(context->entry, "cmd_get", context->stats[context->i].cmd_get);
-	add_assoc_long(context->entry, "cmd_set", context->stats[context->i].cmd_set);
-	add_assoc_long(context->entry, "get_hits", context->stats[context->i].get_hits);
-	add_assoc_long(context->entry, "get_misses", context->stats[context->i].get_misses);
-	add_assoc_long(context->entry, "evictions", context->stats[context->i].evictions);
-	add_assoc_long(context->entry, "bytes_read", context->stats[context->i].bytes_read);
-	add_assoc_long(context->entry, "bytes_written", context->stats[context->i].bytes_written);
-	add_assoc_stringl(context->entry, "version", context->stats[context->i].version, strlen(context->stats[context->i].version), 1);
+		add_assoc_long(entry, "pid", context->stats[context->i].pid);
+		add_assoc_long(entry, "uptime", context->stats[context->i].uptime);
+		add_assoc_long(entry, "threads", context->stats[context->i].threads);
+		add_assoc_long(entry, "time", context->stats[context->i].time);
+		add_assoc_long(entry, "pointer_size", context->stats[context->i].pointer_size);
+		add_assoc_long(entry, "rusage_user_seconds", context->stats[context->i].rusage_user_seconds);
+		add_assoc_long(entry, "rusage_user_microseconds", context->stats[context->i].rusage_user_microseconds);
+		add_assoc_long(entry, "rusage_system_seconds", context->stats[context->i].rusage_system_seconds);
+		add_assoc_long(entry, "rusage_system_microseconds", context->stats[context->i].rusage_system_microseconds);
+		add_assoc_long(entry, "curr_items", context->stats[context->i].curr_items);
+		add_assoc_long(entry, "total_items", context->stats[context->i].total_items);
+		add_assoc_long(entry, "limit_maxbytes", context->stats[context->i].limit_maxbytes);
+		add_assoc_long(entry, "curr_connections", context->stats[context->i].curr_connections);
+		add_assoc_long(entry, "total_connections", context->stats[context->i].total_connections);
+		add_assoc_long(entry, "connection_structures", context->stats[context->i].connection_structures);
+		add_assoc_long(entry, "bytes", context->stats[context->i].bytes);
+		add_assoc_long(entry, "cmd_get", context->stats[context->i].cmd_get);
+		add_assoc_long(entry, "cmd_set", context->stats[context->i].cmd_set);
+		add_assoc_long(entry, "get_hits", context->stats[context->i].get_hits);
+		add_assoc_long(entry, "get_misses", context->stats[context->i].get_misses);
+		add_assoc_long(entry, "evictions", context->stats[context->i].evictions);
+		add_assoc_long(entry, "bytes_read", context->stats[context->i].bytes_read);
+		add_assoc_long(entry, "bytes_written", context->stats[context->i].bytes_written);
+		add_assoc_stringl(entry, "version", context->stats[context->i].version, strlen(context->stats[context->i].version), 1);
 
-	add_assoc_zval_ex(context->return_value, hostport, hostport_len+1, context->entry);
+		add_assoc_zval_ex(context->return_value, hostport, hostport_len+1, entry);
+	}
 	efree(hostport);
 
 	/* Increment the server count in our context structure. Failure to do so will cause only the stats for the last server to get displayed. */
