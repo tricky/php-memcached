@@ -1783,7 +1783,6 @@ PHP_METHOD(Memcached, getServerByKey)
 PHP_METHOD(Memcached, getStats)
 {
 	memcached_stat_st *stats;
-	memcached_server_st *servers;
 	memcached_return status;
 	struct callbackContext context = {0};
 	memcached_server_function callbacks[1];
@@ -1831,7 +1830,6 @@ PHP_METHOD(Memcached, getStats)
    Returns the version of each memcached server in the pool */
 PHP_METHOD(Memcached, getVersion)
 {
-	memcached_server_st *servers;
 	memcached_return status = MEMCACHED_SUCCESS;
 	struct callbackContext context = {0};
 	memcached_server_function callbacks[1];
