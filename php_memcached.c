@@ -47,6 +47,7 @@
 
 #include "php_memcached.h"
 #include "g_fmt.h"
+#include "php_libmemcached_compat.h"
 
 #include "fastlz/fastlz.h"
 #include <zlib.h>
