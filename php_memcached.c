@@ -1789,7 +1789,6 @@ PHP_METHOD(Memcached, getStats)
 	memcached_return status;
 	struct callbackContext context = {0};
 	memcached_server_function callbacks[1];
-	zend_bool free_stats = 1;
 	MEMC_METHOD_INIT_VARS;
 
 	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "") == FAILURE) {
@@ -1798,20 +1797,21 @@ PHP_METHOD(Memcached, getStats)
 
 	MEMC_METHOD_FETCH_OBJECT;
 
-	stats = memcached_stat(m_obj->memc, NULL, &status);
-	/* this is because memcached_stat returns non-null pointer on 0 servers
-	 * which breaks memcached_stat_free, this is not particulary clean */
-	if (errno != 0 || stats == NULL) {
-		free_stats = 0;
-	} else if (memcached_server_count(m_obj->memc) == 0) {
-		free_stats = 0;
+	if (memcached_server_count(m_obj->memc) == 0) {
+		array_init(return_value);
+		return;
 	}
 
+	errno = 0;
+	stats = memcached_stat(m_obj->memc, NULL, &status);
+
 	php_memc_handle_error(i_obj, status TSRMLS_CC);
+	if (errno == ENOMEM || stats == NULL) {
+		RETURN_FALSE;
+	}
+
 	if (status != MEMCACHED_SUCCESS && status != MEMCACHED_SOME_ERRORS) {
-		if (free_stats) {
-			memcached_stat_free(NULL, stats);
-		}
+		memcached_stat_free(NULL, stats);
 		RETURN_FALSE;
 	}
 
@@ -1823,9 +1823,7 @@ PHP_METHOD(Memcached, getStats)
 	context.return_value = return_value;
 	memcached_server_cursor(m_obj->memc, callbacks, &context, 1);
 
-	if (free_stats) {
-		memcached_stat_free(NULL, stats);
-	}
+	memcached_stat_free(NULL, stats);
 }
 /* }}} */
 
