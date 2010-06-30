@@ -181,7 +181,7 @@ class Memcached {
 	const RES_CONNECTION_SOCKET_CREATE_FAILURE;
 
 
-	public function __construct( $persistent_id = '' ) {}
+	public function __construct( $persistent_id = '', $init_cb = null, $cb_arg = null ) {}
 	
 	public function get( $key, $cache_cb = null, &$cas_token = null ) {}
 

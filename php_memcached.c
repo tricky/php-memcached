@@ -267,6 +267,7 @@ PHP_INI_END()
 /****************************************
   Forward declarations
 ****************************************/
+static void php_memc_destroy(struct memc_obj *m_obj, zend_bool persistent TSRMLS_DC);
 static int php_memc_list_entry(void);
 static int php_memc_handle_error(php_memc_t *i_obj, memcached_return status TSRMLS_DC);
 static char *php_memc_zval_to_payload(zval *value, size_t *payload_len, uint32_t *flags, enum memcached_serializer serializer, enum memcached_compression_type compression_type TSRMLS_DC);
@@ -322,8 +323,12 @@ static PHP_METHOD(Memcached, __construct)
 	char *plist_key = NULL;
 	int plist_key_len = 0;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "|s", &persistent_id,
-		&persistent_id_len) == FAILURE) {
+	zval *init_cb_arg = NULL;
+	zend_fcall_info fci = empty_fcall_info;
+	zend_fcall_info_cache fcc = empty_fcall_info_cache;
+
+	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "|s!f!z", &persistent_id,
+		&persistent_id_len, &fci, &fcc, &init_cb_arg) == FAILURE) {
 		ZVAL_NULL(object);
 		return;
 	}
@@ -367,22 +372,54 @@ static PHP_METHOD(Memcached, __construct)
 		m_obj->compression_type = MEMC_G(compression_type_real);
 		m_obj->compression = 1;
 		i_obj->is_pristine = 1;
-
-		if (is_persistent) {
-			zend_rsrc_list_entry le;
-
-			le.type = php_memc_list_entry();
-			le.ptr = m_obj;
-			if (zend_hash_update(&EG(persistent_list), (char *)plist_key,
-				plist_key_len, (void *)&le, sizeof(le), NULL) == FAILURE) {
-				php_error_docref(NULL TSRMLS_CC, E_ERROR, "could not register persistent entry");
-				/* not reached */
-			}
-		}
 	}
 
 	i_obj->is_persistent = is_persistent;
 	i_obj->obj = m_obj;
+
+	// Run init callback if one exists
+	if (i_obj->is_pristine && fci.size != 0) {
+		zval pkey;
+		zval *pkey_ptr = &pkey;
+		zval *cb_retval_ptr = NULL;
+		zval **params[] = {
+			&object, &pkey_ptr, &init_cb_arg
+		};
+
+		INIT_ZVAL(pkey);
+		if (persistent_id != NULL) {
+			ZVAL_STRINGL(pkey_ptr, persistent_id, persistent_id_len, 0);
+		}
+
+		fci.retval_ptr_ptr = &cb_retval_ptr;
+		fci.params = params;
+		fci.param_count = init_cb_arg == NULL ? 2 : 3;
+
+		if (zend_call_function(&fci, &fcc TSRMLS_CC) == SUCCESS) {
+			if (cb_retval_ptr) {
+				zval_ptr_dtor(&cb_retval_ptr);
+			}
+		} else {
+			php_error_docref(NULL TSRMLS_CC, E_WARNING, "error invoking initialization callback");
+		}
+	}
+
+	if (is_persistent && i_obj->is_pristine && EG(exception)) {
+		i_obj->obj = NULL;
+		php_memc_destroy(m_obj, 1 TSRMLS_CC);
+	} else if (is_persistent && i_obj->is_pristine) {
+		zend_rsrc_list_entry le;
+
+		le.type = php_memc_list_entry();
+		le.ptr = m_obj;
+		if (zend_hash_update(&EG(persistent_list), (char *)plist_key,
+			plist_key_len, (void *)&le, sizeof(le), NULL) == FAILURE) {
+			i_obj->obj = NULL;
+			php_memc_destroy(m_obj, 1 TSRMLS_CC);
+			php_error_docref(NULL TSRMLS_CC, E_ERROR, "could not register persistent entry");
+			/* not reached */
+		}
+	}
 
 	if (plist_key != NULL) {
 		efree(plist_key);
@@ -3091,6 +3128,8 @@ PS_GC_FUNC(memcached)
 /* {{{ methods arginfo */
 ZEND_BEGIN_ARG_INFO_EX(arginfo___construct, 0, 0, 0)
 	ZEND_ARG_INFO(0, persistent_id)
+	ZEND_ARG_INFO(0, init_cb)
+	ZEND_ARG_INFO(0, init_cb_arg)
 ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_INFO(arginfo_getResultCode, 0)
