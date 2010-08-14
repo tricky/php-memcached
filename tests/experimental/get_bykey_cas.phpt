@@ -50,13 +50,13 @@ var_dump($cas);
 var_dump($m->getByKey('foo', 'foo'));
 --EXPECTF--
 int(1)
-float(%d)
+float(%f)
 SUCCESS
 int(1)
-float(%d)
+float(%f)
 SUCCESS
 string(4) "asdf"
-float(%d)
+float(%f)
 SUCCESS
 NULL
 NULL

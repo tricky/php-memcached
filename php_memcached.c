@@ -148,24 +148,6 @@ typedef unsigned long int uint32_t;
 		return;	\
 	}
 
-#ifndef DVAL_TO_LVAL
-#ifdef _WIN64
-# define DVAL_TO_LVAL(d, l) \
-      if ((d) > LONG_MAX) { \
-              (l) = (long)(unsigned long)(__int64) (d); \
-      } else { \
-              (l) = (long) (d); \
-      }
-#else
-# define DVAL_TO_LVAL(d, l) \
-      if ((d) > LONG_MAX) { \
-              (l) = (unsigned long) (d); \
-      } else { \
-              (l) = (long) (d); \
-      }
-#endif
-#endif
-
 #define RETURN_FROM_GET RETURN_NULL()
 
 /****************************************
@@ -304,6 +286,23 @@ static memcached_return php_memc_do_serverlist_callback(const memcached_st *ptr,
 static memcached_return php_memc_do_stats_callback(const memcached_st *ptr, memcached_server_instance_st instance, void *in_context);
 static memcached_return php_memc_do_version_callback(const memcached_st *ptr, memcached_server_instance_st instance, void *in_context);
 
+/****************************************
+  Utility functions
+****************************************/
+
+static inline double uint64_to_double(uint64_t i) {
+	union {double d; uint64_t i;} x;
+
+	x.i = i;
+	return x.d;
+}
+
+static inline uint64_t double_to_uint64(double d) {
+	union {double d; uint64_t i;} x;
+
+	x.d = d;
+	return x.i;
+}
 
 /****************************************
   Method implementations
@@ -514,7 +513,7 @@ static void php_memc_get_impl(INTERNAL_FUNCTION_PARAMETERS, zend_bool by_key)
 		}
 
 		zval_dtor(cas_token);
-		ZVAL_DOUBLE(cas_token, (double)cas);
+		ZVAL_DOUBLE(cas_token, uint64_to_double(cas));
 
 		memcached_result_free(&result);
 
@@ -735,7 +734,8 @@ static void php_memc_getMulti_impl(INTERNAL_FUNCTION_PARAMETERS, zend_bool by_ke
 		add_assoc_zval_ex(return_value, res_key, res_key_len+1, value);
 		if (cas_tokens) {
 			cas = memcached_result_cas(&result);
-			add_assoc_double_ex(cas_tokens, res_key, res_key_len+1, (double)cas);
+			add_assoc_double_ex(cas_tokens, res_key, res_key_len+1,
+				uint64_to_double(cas));
 		}
 	}
 
@@ -941,7 +941,8 @@ PHP_METHOD(Memcached, fetch)
 	add_assoc_zval_ex(return_value, ZEND_STRS("value"), value);
 	if (cas != 0) {
 		/* XXX: also check against ULLONG_MAX or memc_behavior */
-		add_assoc_double_ex(return_value, ZEND_STRS("cas"), (double)cas);
+		add_assoc_double_ex(return_value, ZEND_STRS("cas"),
+			uint64_to_double(cas));
 	}
 
 	memcached_result_free(&result);
@@ -997,7 +998,8 @@ PHP_METHOD(Memcached, fetchAll)
 		add_assoc_zval_ex(entry, ZEND_STRS("value"), value);
 		if (cas != 0) {
 			/* XXX: also check against ULLONG_MAX or memc_behavior */
-			add_assoc_double_ex(entry, ZEND_STRS("cas"), (double)cas);
+			add_assoc_double_ex(entry, ZEND_STRS("cas"),
+				uint64_to_double(cas));
 		}
 		add_next_index_zval(return_value, entry);
 	}
@@ -1375,7 +1377,7 @@ static void php_memc_cas_impl(INTERNAL_FUNCTION_PARAMETERS, zend_bool by_key)
 		RETURN_FALSE;
 	}
 
-	DVAL_TO_LVAL(cas_d, cas);
+	cas = double_to_uint64(cas_d);
 
 	if (m_obj->compression) {
 		flags |= MEMC_VAL_COMPRESSED;
@@ -2879,7 +2881,8 @@ static int php_memc_do_result_callback(zval *zmemc_obj, zend_fcall_info *fci,
 	add_assoc_stringl_ex(z_result, ZEND_STRS("key"), res_key, res_key_len, 1);
 	add_assoc_zval_ex(z_result, ZEND_STRS("value"), value);
 	if (cas != 0) {
-		add_assoc_double_ex(z_result, ZEND_STRS("cas"), (double)cas);
+		add_assoc_double_ex(z_result, ZEND_STRS("cas"),
+			uint64_to_double(cas));
 	}
 
 	if (zend_call_function(fci, fcc TSRMLS_CC) == FAILURE) {

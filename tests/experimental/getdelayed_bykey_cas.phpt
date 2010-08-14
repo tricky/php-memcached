@@ -39,7 +39,7 @@ array(3) {
   ["value"]=>
   string(8) "foo-data"
   ["cas"]=>
-  float(%d)
+  float(%f)
 }
 array(3) {
   ["key"]=>
@@ -47,7 +47,7 @@ array(3) {
   ["value"]=>
   string(8) "bar-data"
   ["cas"]=>
-  float(%d)
+  float(%f)
 }
 array(3) {
   ["key"]=>
@@ -55,7 +55,7 @@ array(3) {
   ["value"]=>
   string(8) "baz-data"
   ["cas"]=>
-  float(%d)
+  float(%f)
 }
 array(3) {
   ["key"]=>
@@ -63,7 +63,7 @@ array(3) {
   ["value"]=>
   string(8) "lol-data"
   ["cas"]=>
-  float(%d)
+  float(%f)
 }
 array(3) {
   ["key"]=>
@@ -71,5 +71,5 @@ array(3) {
   ["value"]=>
   string(8) "kek-data"
   ["cas"]=>
-  float(%d)
+  float(%f)
 }
