@@ -8,14 +8,15 @@ $m = new Memcached();
 $m->addServer('localhost', 11211, 1);
 
 error_reporting(0);
-var_dump($m->cas(0, '', true, 10));
+
+var_dump($m->cas("1", '', true, 10));
 echo $m->getResultMessage(), "\n";
 
-var_dump($m->cas(0, ' дц jas kjjhask d ', true, 10));
+var_dump($m->cas("1", ' дц jas kjjhask d ', true, 10));
 echo $m->getResultMessage(), "\n";
 
 --EXPECTF--
 bool(false)
 A BAD KEY WAS PROVIDED/CHARACTERS OUT OF RANGE
 bool(false)
-%rCLIENT ERROR|NOT FOUND%r
+%r(CLIENT ERROR|NOT FOUND|WRITE FAILURE)%r

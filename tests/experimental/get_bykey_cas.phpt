@@ -13,50 +13,60 @@ function the_callback(Memcached $memc, $key, &$value) {
 	return 1;
 }
 
+function print_cas($cas) {
+	if (is_integer($cas) && $cas != 0) {
+		echo $cas, "\n";
+	} elseif (is_string($cas) && $cas != 0) {
+		echo $cas, "\n";
+	} else {
+		var_dump($cas);
+	}
+}
+
 $m->set('foo', 1, 10);
 
 $cas = null;
 var_dump($m->getByKey('foo', 'foo', null, $cas));
-var_dump($cas);
+print_cas($cas);
 echo $m->getResultMessage(), "\n";
 
 $cas = null;
 var_dump($m->getByKey('', 'foo', null, $cas));
-var_dump($cas);
+print_cas($cas);
 echo $m->getResultMessage(), "\n";
 
 $m->set('bar', "asdf", 10);
 
 $cas = null;
 var_dump($m->getByKey('foo', 'bar', null, $cas));
-var_dump($cas);
+print_cas($cas);
 echo $m->getResultMessage(), "\n";
 
 $m->delete('foo');
 $cas = null;
 var_dump($m->getByKey(' д foo jkh a s едц', 'foo', null, $cas));
-var_dump($cas);
+print_cas($cas);
 echo $m->getResultMessage(), "\n";
 
 $cas = null;
 var_dump($m->getByKey(' д foo jkh a s едц', '', null, $cas));
-var_dump($cas);
+print_cas($cas);
 echo $m->getResultMessage(), "\n";
 
 $m->delete('foo');
 $cas = null;
 var_dump($m->getByKey('foo', 'foo', 'the_callback', $cas));
-var_dump($cas);
+print_cas($cas);
 var_dump($m->getByKey('foo', 'foo'));
 --EXPECTF--
 int(1)
-float(%d)
+%i
 SUCCESS
 int(1)
-float(%d)
+%i
 SUCCESS
 string(4) "asdf"
-float(%d)
+%i
 SUCCESS
 bool(false)
 NULL
@@ -66,5 +76,5 @@ NULL
 A BAD KEY WAS PROVIDED/CHARACTERS OUT OF RANGE
 called
 string(4) "1234"
-float(0)
+NULL
 string(4) "1234"

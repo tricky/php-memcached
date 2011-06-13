@@ -152,24 +152,6 @@ typedef unsigned long int uint32_t;
 		return;	\
 	}
 
-#ifndef DVAL_TO_LVAL
-#ifdef _WIN64
-# define DVAL_TO_LVAL(d, l) \
-      if ((d) > LONG_MAX) { \
-              (l) = (long)(unsigned long)(__int64) (d); \
-      } else { \
-              (l) = (long) (d); \
-      }
-#else
-# define DVAL_TO_LVAL(d, l) \
-      if ((d) > LONG_MAX) { \
-              (l) = (unsigned long) (d); \
-      } else { \
-              (l) = (long) (d); \
-      }
-#endif
-#endif
-
 #define RETURN_FROM_GET RETURN_FALSE
 
 /****************************************
@@ -320,6 +302,50 @@ static memcached_return php_memc_do_version_callback(const memcached_st *ptr, me
 static void php_memc_destroy(struct memc_obj *m_obj, zend_bool persistent TSRMLS_DC);
 
 /****************************************
+  Utility functions
+****************************************/
+
+static inline zval *cas_to_zval(zval *z, uint64_t cas TSRMLS_DC) {
+#if SIZEOF_LONG >= 8
+	ZVAL_LONG(z, cas);
+#elif SIZEOF_LONG == 4 && SIZEOF_LONG_LONG == 8
+	char *str = (char *)emalloc(21);
+	int len;
+
+	len = slprintf(str, 21, "%lld", (unsigned long long)cas);
+
+	ZVAL_STRINGL(z, str, len, 0);
+#else
+#error Strange long and/or long long size
+#endif
+
+	return z;
+}
+
+static inline uint64_t zval_to_cas(zval *z TSRMLS_DC) {
+	if (Z_TYPE_P(z) == IS_LONG) {
+		return (uint64_t)Z_LVAL_P(z);
+	} else if (Z_TYPE_P(z) == IS_STRING && Z_STRLEN_P(z) > 0) {
+		char *end;
+		long long cas = strtoll(Z_STRVAL_P(z), &end, 10);
+
+		if (cas == LLONG_MAX && errno == ERANGE) {
+			return 0;
+		}
+
+		if (end != Z_STRVAL_P(z) + Z_STRLEN_P(z)) {
+			errno = ERANGE;
+			return 0;
+		}
+
+		return (uint64_t)cas;
+	} else {
+		errno = ERANGE;
+		return 0;
+	}
+}
+
+/****************************************
   Method implementations
 ****************************************/
 
@@ -461,7 +487,7 @@ static PHP_METHOD(Memcached, __construct)
 }
 /* }}} */
 
-/* {{{ Memcached::get(string key [, mixed callback [, double &cas_token ] ])
+/* {{{ Memcached::get(string key [, mixed callback [, mixed &cas_token ] ])
    Returns a value for the given key or false */
 PHP_METHOD(Memcached, get)
 {
@@ -469,7 +495,7 @@ PHP_METHOD(Memcached, get)
 }
 /* }}} */
 
-/* {{{ Memcached::getByKey(string server_key, string key [, mixed callback [, double &cas_token ] ])
+/* {{{ Memcached::getByKey(string server_key, string key [, mixed callback [, mixed &cas_token ] ])
    Returns a value for key from the server identified by the server key or false */
 PHP_METHOD(Memcached, getByKey)
 {
@@ -551,13 +577,11 @@ static void php_memc_get_impl(INTERNAL_FUNCTION_PARAMETERS, zend_bool by_key)
 
 			/*
 			 * If the result wasn't found, and we have the read-through callback, invoke
-			 * it to get the value. The CAS token will be 0, because we cannot generate it
-			 * ourselves.
+			 * it to get the value. The CAS token will be untouched.
 			 */
 			if (status == MEMCACHED_NOTFOUND && fci.size != 0) {
 				status = php_memc_do_cache_callback(getThis(), &fci, &fcc, key, key_len,
 													return_value TSRMLS_CC);
-				ZVAL_DOUBLE(cas_token, 0);
 			}
 
 			if (php_memc_handle_error(i_obj, status TSRMLS_CC) < 0) {
@@ -584,7 +608,7 @@ static void php_memc_get_impl(INTERNAL_FUNCTION_PARAMETERS, zend_bool by_key)
 		}
 
 		zval_dtor(cas_token);
-		ZVAL_DOUBLE(cas_token, (double)cas);
+		cas_to_zval(cas_token, cas TSRMLS_CC);
 
 		memcached_result_free(&result);
 
@@ -755,7 +779,7 @@ static void php_memc_getMulti_impl(INTERNAL_FUNCTION_PARAMETERS, zend_bool by_ke
 
 	/*
 	 * Iterate through the result set and create the result array. The CAS tokens are
-	 * returned as doubles, because we cannot store potential 64-bit values in longs.
+	 * returned as strings, because we cannot store potential 64b values in 32b longs.
 	 */
 	if (cas_tokens) {
 		zval_dtor(cas_tokens);
@@ -801,8 +825,13 @@ static void php_memc_getMulti_impl(INTERNAL_FUNCTION_PARAMETERS, zend_bool by_ke
 
 		add_assoc_zval_ex(return_value, res_key, res_key_len+1, value);
 		if (cas_tokens) {
+			zval *zcas;
+
+			MAKE_STD_ZVAL(zcas);
+
 			cas = memcached_result_cas(&result);
-			add_assoc_double_ex(cas_tokens, res_key, res_key_len+1, (double)cas);
+			cas_to_zval(zcas, cas TSRMLS_CC);
+			add_assoc_zval_ex(cas_tokens, res_key, res_key_len + 1, zcas);
 		}
 	}
 
@@ -1008,7 +1037,12 @@ PHP_METHOD(Memcached, fetch)
 	add_assoc_zval_ex(return_value, ZEND_STRS("value"), value);
 	if (cas != 0) {
 		/* XXX: also check against ULLONG_MAX or memc_behavior */
-		add_assoc_double_ex(return_value, ZEND_STRS("cas"), (double)cas);
+		zval *zcas;
+
+		MAKE_STD_ZVAL(zcas);
+
+		cas_to_zval(zcas, cas TSRMLS_CC);
+		add_assoc_zval_ex(return_value, ZEND_STRS("cas"), zcas);
 	}
 
 	memcached_result_free(&result);
@@ -1064,7 +1098,12 @@ PHP_METHOD(Memcached, fetchAll)
 		add_assoc_zval_ex(entry, ZEND_STRS("value"), value);
 		if (cas != 0) {
 			/* XXX: also check against ULLONG_MAX or memc_behavior */
-			add_assoc_double_ex(entry, ZEND_STRS("cas"), (double)cas);
+			zval *zcas;
+
+			MAKE_STD_ZVAL(zcas);
+
+			cas_to_zval(zcas, cas TSRMLS_CC);
+			add_assoc_zval_ex(entry, ZEND_STRS("cas"), zcas);
 		}
 		add_next_index_zval(return_value, entry);
 	}
@@ -1389,7 +1428,7 @@ static void php_memc_store_impl(INTERNAL_FUNCTION_PARAMETERS, int op, zend_bool 
 }
 /* }}} */
 
-/* {{{ Memcached::cas(double cas_token, string key, mixed value [, int expiration ])
+/* {{{ Memcached::cas(mixed cas_token, string key, mixed value [, int expiration ])
    Sets the value for the given key, failing if the cas_token doesn't match the one in memcache */
 PHP_METHOD(Memcached, cas)
 {
@@ -1397,7 +1436,7 @@ PHP_METHOD(Memcached, cas)
 }
 /* }}} */
 
-/* {{{ Memcached::casByKey(double cas_token, string server_key, string key, mixed value [, int expiration ])
+/* {{{ Memcached::casByKey(mixed cas_token, string server_key, string key, mixed value [, int expiration ])
    Sets the value for the given key on the server identified by the server_key, failing if the cas_token doesn't match the one in memcache */
 PHP_METHOD(Memcached, casByKey)
 {
@@ -1408,7 +1447,7 @@ PHP_METHOD(Memcached, casByKey)
 /* {{{ -- php_memc_cas_impl */
 static void php_memc_cas_impl(INTERNAL_FUNCTION_PARAMETERS, zend_bool by_key)
 {
-	double cas_d;
+	zval *zcas;
 	uint64_t cas;
 	char *key = NULL;
 	int   key_len = 0;
@@ -1423,12 +1462,12 @@ static void php_memc_cas_impl(INTERNAL_FUNCTION_PARAMETERS, zend_bool by_key)
 	MEMC_METHOD_INIT_VARS;
 
 	if (by_key) {
-		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "dssz|l", &cas_d, &server_key,
+		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "zssz|l", &zcas, &server_key,
 								  &server_key_len, &key, &key_len, &value, &expiration) == FAILURE) {
 			return;
 		}
 	} else {
-		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "dsz|l", &cas_d, &key, &key_len,
+		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "zsz|l", &zcas, &key, &key_len,
 								  &value, &expiration) == FAILURE) {
 			return;
 		}
@@ -1442,7 +1481,13 @@ static void php_memc_cas_impl(INTERNAL_FUNCTION_PARAMETERS, zend_bool by_key)
 		RETURN_FALSE;
 	}
 
-	DVAL_TO_LVAL(cas_d, cas);
+	cas = zval_to_cas(zcas TSRMLS_CC);
+	if (cas == 0) {
+		php_error_docref(NULL TSRMLS_CC, E_WARNING,
+			"invalid CAS, value should be a 64 bit non-zero integer or numeric string.");
+		i_obj->rescode = MEMCACHED_PROTOCOL_ERROR;
+		RETURN_FALSE;
+	}
 
 	if (m_obj->compression) {
 		flags |= MEMC_VAL_COMPRESSED;
@@ -1843,7 +1888,7 @@ PHP_METHOD(Memcached, getStats)
 {
 	memcached_stat_st *stats;
 	memcached_return status;
-	zval *entry;
+	zval *entry = NULL;
 	struct callbackContext context = {0};
 	memcached_server_function callbacks[1];
 	MEMC_METHOD_INIT_VARS;
@@ -2977,7 +3022,12 @@ static int php_memc_do_result_callback(zval *zmemc_obj, zend_fcall_info *fci,
 	add_assoc_stringl_ex(z_result, ZEND_STRS("key"), res_key, res_key_len, 1);
 	add_assoc_zval_ex(z_result, ZEND_STRS("value"), value);
 	if (cas != 0) {
-		add_assoc_double_ex(z_result, ZEND_STRS("cas"), (double)cas);
+		zval *zcas;
+
+		MAKE_STD_ZVAL(zcas);
+
+		cas_to_zval(zcas, cas TSRMLS_CC);
+		add_assoc_zval_ex(z_result, ZEND_STRS("cas"), zcas);
 	}
 
 	if (zend_call_function(fci, fcc TSRMLS_CC) == FAILURE) {

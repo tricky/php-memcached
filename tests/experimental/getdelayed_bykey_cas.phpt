@@ -4,6 +4,16 @@ Memcached::getDelayedByKey() with CAS
 <?php if (!extension_loaded("memcached")) print "skip"; ?>
 --FILE--
 <?php
+function print_cas($cas) {
+	if (is_integer($cas) && $cas != 0) {
+		echo $cas, "\n";
+	} elseif (is_string($cas) && $cas != 0) {
+		echo $cas, "\n";
+	} else {
+		var_dump($cas);
+	}
+}
+
 $m = new Memcached();
 $m->addServer('localhost', 11211, 1);
 
@@ -24,6 +34,8 @@ function myfunc() {
 	if (isset($datas[1])) {
 		if (isset($datas[1]['cas']) and $datas[1]['cas'] == 0) {
 			echo "Invalid cas\n";
+		} else {
+			settype($datas[1]['cas'], 'string');
 		}
 		var_dump($datas[1]);
 	}
@@ -39,7 +51,7 @@ array(3) {
   ["value"]=>
   string(8) "foo-data"
   ["cas"]=>
-  float(%d)
+  string(%d) "%i"
 }
 array(3) {
   ["key"]=>
@@ -47,7 +59,7 @@ array(3) {
   ["value"]=>
   string(8) "bar-data"
   ["cas"]=>
-  float(%d)
+  string(%d) "%i"
 }
 array(3) {
   ["key"]=>
@@ -55,7 +67,7 @@ array(3) {
   ["value"]=>
   string(8) "baz-data"
   ["cas"]=>
-  float(%d)
+  string(%d) "%i"
 }
 array(3) {
   ["key"]=>
@@ -63,7 +75,7 @@ array(3) {
   ["value"]=>
   string(8) "lol-data"
   ["cas"]=>
-  float(%d)
+  string(%d) "%i"
 }
 array(3) {
   ["key"]=>
@@ -71,5 +83,5 @@ array(3) {
   ["value"]=>
   string(8) "kek-data"
   ["cas"]=>
-  float(%d)
+  string(%d) "%i"
 }
