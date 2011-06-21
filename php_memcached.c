@@ -189,8 +189,6 @@ enum {
 	MEMC_OP_PREPEND
 };
 
-static int le_memc;
-
 static zend_class_entry *memcached_ce = NULL;
 static zend_class_entry *memcached_exception_ce = NULL;
 
@@ -281,7 +279,6 @@ PHP_INI_END()
 /****************************************
   Forward declarations
 ****************************************/
-static int php_memc_list_entry(void);
 static int php_memc_handle_error(php_memc_t *i_obj, memcached_return status TSRMLS_DC);
 static char *php_memc_zval_to_payload(zval *value, size_t *payload_len, uint32_t *flags, enum memcached_serializer serializer, enum memcached_compression_type compression_type TSRMLS_DC);
 static int php_memc_zval_from_payload(zval *value, char *payload, size_t payload_len, uint32_t flags, enum memcached_serializer serializer TSRMLS_DC);
@@ -379,25 +376,31 @@ static zend_bool php_memcached_on_new_callback(zval *object, zend_fcall_info *fc
 	return 1;
 }
 
-/* {{{ Memcached::__construct([string persistent_id[, callback on_new]]))
+static int le_memc, le_memc_sess;
+
+static int php_memc_list_entry(void)
+{
+	return le_memc;
+}
+
+/* {{{ Memcached::__construct([string persistent_id[, callback on_new[, string connection_str]]]))
    Creates a Memcached object, optionally using persistent memcache connection */
 static PHP_METHOD(Memcached, __construct)
 {
 	zval *object = getThis();
 	php_memc_t *i_obj;
 	struct memc_obj *m_obj = NULL;
-	char *persistent_id = NULL;
-	int persistent_id_len;
+	char *persistent_id = NULL, *conn_str = NULL;
+	int persistent_id_len, conn_str_len;
 	zend_bool is_persistent = 0;
 
 	char *plist_key = NULL;
 	int plist_key_len = 0;
 
-	zend_fcall_info fci;
+	zend_fcall_info fci = {0};
 	zend_fcall_info_cache fci_cache;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "|s!f", &persistent_id,
-		&persistent_id_len, &fci, &fci_cache) == FAILURE) {
+	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "|s!f!s", &persistent_id, &persistent_id_len, &fci, &fci_cache, &conn_str, &conn_str_len) == FAILURE) {
 		ZVAL_NULL(object);
 		return;
 	}
@@ -412,11 +415,6 @@ static PHP_METHOD(Memcached, __construct)
 		plist_key_len = spprintf(&plist_key, 0, "memcached:id=%s", persistent_id);
 		plist_key_len += 1;
 
-		if (plist_key == NULL) {
-			php_error_docref(NULL TSRMLS_CC, E_ERROR, "out of memory: cannot allocate persistent list handler");
-			/* not reached */
-		}
-
 		if (zend_hash_find(&EG(persistent_list), plist_key, plist_key_len, (void *)&le) == SUCCESS) {
 			if (le->type == php_memc_list_entry()) {
 				m_obj = (struct memc_obj *) le->ptr;
@@ -430,16 +428,36 @@ static PHP_METHOD(Memcached, __construct)
 	if (!m_obj) {
 		m_obj = pecalloc(1, sizeof(*m_obj), is_persistent);
 		if (m_obj == NULL) {
-			efree(plist_key);
+			if (plist_key) {
+				efree(plist_key);
+			}
 			php_error_docref(NULL TSRMLS_CC, E_ERROR, "out of memory: cannot allocate handle");
 			/* not reached */
 		}
 
-		m_obj->memc = memcached_create(NULL);
-		if (m_obj->memc == NULL) {
-			efree(plist_key);
-			php_error_docref(NULL TSRMLS_CC, E_ERROR, "could not allocate libmemcached structure");
-			/* not reached */
+		if (conn_str) {
+			m_obj->memc = memcached(conn_str, conn_str_len);
+			if (!m_obj->memc) {
+				char error_buffer[1024];
+				if (plist_key) {
+					efree(plist_key);
+				}
+				if (libmemcached_check_configuration(conn_str, conn_str_len, error_buffer, sizeof(error_buffer)) != MEMCACHED_SUCCESS) {
+					php_error_docref(NULL TSRMLS_CC, E_ERROR, "configuration error %s", error_buffer);
+				} else {
+					php_error_docref(NULL TSRMLS_CC, E_ERROR, "could not allocate libmemcached structure");
+				}
+				/* not reached */
+			}
+		} else {
+			m_obj->memc = memcached_create(NULL);
+			if (m_obj->memc == NULL) {
+				if (plist_key) {
+					efree(plist_key);
+				}
+				php_error_docref(NULL TSRMLS_CC, E_ERROR, "could not allocate libmemcached structure");
+				/* not reached */
+			}
 		}
 
 		m_obj->serializer = MEMC_G(serializer);
@@ -449,10 +467,10 @@ static PHP_METHOD(Memcached, __construct)
 		i_obj->obj = m_obj;
 		i_obj->is_pristine = 1;
 
-		if (ZEND_NUM_ARGS() >= 2) {
+		if (fci.size) { /* will be 0 when not available */
 			if (!php_memcached_on_new_callback(object, &fci, &fci_cache, persistent_id, persistent_id_len TSRMLS_CC) || EG(exception)) {
 				/* error calling or exception thrown from callback */
-				if (plist_key != NULL) {
+				if (plist_key) {
 					efree(plist_key);
 				}
 
@@ -472,14 +490,16 @@ static PHP_METHOD(Memcached, __construct)
 			le.ptr = m_obj;
 			if (zend_hash_update(&EG(persistent_list), (char *)plist_key,
 				plist_key_len, (void *)&le, sizeof(le), NULL) == FAILURE) {
-				efree(plist_key);
+				if (plist_key) {
+					efree(plist_key);
+				}
 				php_error_docref(NULL TSRMLS_CC, E_ERROR, "could not register persistent entry");
 				/* not reached */
 			}
 		}
 	}
 
-	if (plist_key != NULL) {
+	if (plist_key) {
 		efree(plist_key);
 	}
 }
@@ -1686,6 +1706,7 @@ static void php_memc_incdec_impl(INTERNAL_FUNCTION_PARAMETERS, zend_bool by_key,
 	memcached_return status;
 	int n_args = ZEND_NUM_ARGS();
 	uint32_t retry = 0;
+
 	MEMC_METHOD_INIT_VARS;
 
 	if (!by_key) {
@@ -2499,6 +2520,16 @@ ZEND_RSRC_DTOR_FUNC(php_memc_dtor)
 		rsrc->ptr = NULL;
 	}
 }
+
+ZEND_RSRC_DTOR_FUNC(php_memc_sess_dtor)
+{
+	if (rsrc->ptr) {
+		memcached_sess *memc_sess = (memcached_sess *)rsrc->ptr;
+		memcached_free(memc_sess->memc_sess);
+		pefree(rsrc->ptr, 1);
+		rsrc->ptr = NULL;
+	}
+}
 /* }}} */
 
 /* {{{ internal API functions */
@@ -2945,11 +2976,6 @@ my_error:
 		efree(payload);
 	}
 	return -1;
-}
-
-static int php_memc_list_entry(void)
-{
-	return le_memc;
 }
 
 static void php_memc_init_globals(zend_php_memcached_globals *php_memcached_globals_p TSRMLS_DC)
@@ -3512,8 +3538,13 @@ zend_module_entry memcached_module_entry = {
 	NULL,
 	PHP_MINIT(memcached),
 	PHP_MSHUTDOWN(memcached),
+#if HAVE_MEMCACHED_SASL
 	PHP_RINIT(memcached),
 	PHP_RSHUTDOWN(memcached),
+#else
+	NULL,
+	NULL,
+#endif
 	PHP_MINFO(memcached),
 	PHP_MEMCACHED_VERSION,
 	STANDARD_MODULE_PROPERTIES
@@ -3584,6 +3615,8 @@ static void php_memc_register_constants(INIT_FUNC_ARGS)
 	REGISTER_MEMC_CLASS_CONST_LONG(DISTRIBUTION_MODULA, MEMCACHED_DISTRIBUTION_MODULA);
 	REGISTER_MEMC_CLASS_CONST_LONG(DISTRIBUTION_CONSISTENT, MEMCACHED_DISTRIBUTION_CONSISTENT);
 	REGISTER_MEMC_CLASS_CONST_LONG(OPT_LIBKETAMA_COMPATIBLE, MEMCACHED_BEHAVIOR_KETAMA_WEIGHTED);
+	REGISTER_MEMC_CLASS_CONST_LONG(OPT_LIBKETAMA_HASH, MEMCACHED_BEHAVIOR_KETAMA_HASH);
+	REGISTER_MEMC_CLASS_CONST_LONG(OPT_TCP_KEEPALIVE, MEMCACHED_BEHAVIOR_TCP_KEEPALIVE);
 	REGISTER_MEMC_CLASS_CONST_LONG(OPT_BUFFER_WRITES, MEMCACHED_BEHAVIOR_BUFFER_REQUESTS);
 	REGISTER_MEMC_CLASS_CONST_LONG(OPT_BINARY_PROTOCOL, MEMCACHED_BEHAVIOR_BINARY_PROTOCOL);
 	REGISTER_MEMC_CLASS_CONST_LONG(OPT_NO_BLOCK, MEMCACHED_BEHAVIOR_NO_BLOCK);
@@ -3684,26 +3717,30 @@ static void php_memc_register_constants(INIT_FUNC_ARGS)
 }
 /* }}} */
 
+#if HAVE_MEMCACHED_SASL
 PHP_RINIT_FUNCTION(memcached)
 {
-#if HAVE_MEMCACHED_SASL
 	if (MEMC_G(use_sasl)) {
 		if (sasl_client_init(NULL) != SASL_OK) {
 			php_error_docref(NULL TSRMLS_CC, E_ERROR, "Failed to initialize SASL library");
 		}
 	}
-#endif
 	return SUCCESS;
 }
 
 PHP_RSHUTDOWN_FUNCTION(memcached)
 {
-#if HAVE_MEMCACHED_SASL
 	if (MEMC_G(use_sasl)) {
 		sasl_done();
 	}
-#endif
+
 	return SUCCESS;
+}
+#endif
+
+int php_memc_sess_list_entry(void)
+{
+	return le_memc_sess;
 }
 
 /* {{{ PHP_MINIT_FUNCTION */
@@ -3715,6 +3752,7 @@ PHP_MINIT_FUNCTION(memcached)
 	memcached_object_handlers.clone_obj = NULL;
 
 	le_memc = zend_register_list_destructors_ex(NULL, php_memc_dtor, "Memcached persistent connection", module_number);
+	le_memc_sess = zend_register_list_destructors_ex(NULL, php_memc_sess_dtor, "Memcached  Sessions persistent connection", module_number);
 
 	INIT_CLASS_ENTRY(ce, "Memcached", memcached_class_methods);
 	memcached_ce = zend_register_internal_class(&ce TSRMLS_CC);
