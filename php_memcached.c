@@ -3504,7 +3504,7 @@ static zend_function_entry memcached_class_methods[] = {
 #endif
 	MEMC_ME(isPersistent,       arginfo_isPersistent)
 	MEMC_ME(isPristine,         arginfo_isPristine)
-	{ NULL, NULL, NULL }
+	{ NULL, NULL, NULL, 0, 0 }
 };
 #undef MEMC_ME
 /* }}} */
